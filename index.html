@@ -442,6 +442,18 @@ body.ready .tl{transform:none}
   .grain,.app img,.badge svg,.focus,.rec,.hint i{animation:none}
   .rv,.w>span{transition-duration:.01s}
 }
+
+/* ---------- touch devices: keep the look, drop the expensive layers ---------- */
+html.lite{scroll-behavior:auto}
+html.lite *{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+html.lite .grain{animation:none;mix-blend-mode:normal;opacity:.04;inset:0}
+html.lite .hud{background:rgba(9,9,11,.92)}
+html.lite .tl{background:rgba(9,9,11,.94)}
+html.lite .proj-head .file{background:rgba(9,9,11,.72)}
+html.lite .ytplay{background:rgba(24,24,28,.6)}
+html.lite .chip{background:rgba(255,255,255,.09)}
+html.lite .rv{filter:none;transition:opacity .8s var(--ease),transform .9s var(--ease);transition-delay:var(--d,0ms)}
+html.lite .veodi{--k:0!important}
 </style>
 </head>
 <body class="loading">
@@ -730,6 +742,7 @@ const lerp=(a,b,t)=>a+(b-a)*t, clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v));
 const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const FINE=matchMedia('(hover:hover) and (pointer:fine)').matches;
 let vw=innerWidth, vh=innerHeight, S=scrollY, tmx=0, tmy=0, mx=0, my=0, px=vw/2, py=vh/2, rx=px, ry=py;
+const LITE=!FINE||vw<=900; if(LITE) document.documentElement.classList.add('lite');
 const wide=()=>vw>900;
 
 /* ---------- split text ---------- */
@@ -844,7 +857,7 @@ void main(){
   g.bufferData(g.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),g.STATIC_DRAW);
   const loc=g.getAttribLocation(pr,'p');g.enableVertexAttribArray(loc);g.vertexAttribPointer(loc,2,g.FLOAT,false,0,0);
   const U={};['r','t','s','m','c1','c2','c3'].forEach(k=>U[k]=g.getUniformLocation(pr,k));
-  const size=()=>{const sc=vw>900?.5:.6;cv.width=Math.max(2,Math.round(vw*sc));cv.height=Math.max(2,Math.round(vh*sc));g.viewport(0,0,cv.width,cv.height)};
+  const size=()=>{const sc=LITE?.34:.5;cv.width=Math.max(2,Math.round(vw*sc));cv.height=Math.max(2,Math.round(vh*sc));g.viewport(0,0,cv.width,cv.height)};
   size();
   return {size,draw(time){
     g.uniform2f(U.r,cv.width,cv.height);g.uniform1f(U.t,time);g.uniform1f(U.s,S*.00045);
@@ -862,8 +875,10 @@ const clipEls=clips.map(s=>{
   a.href='#'+s.id;a.setAttribute('aria-label','Jump to '+s.dataset.clip);tlt.appendChild(a);return a;
 });
 let docH=1, reelTop=0, reelLen=1, tops=[];
+let measured=false;
 function measure(){
-  vw=innerWidth;vh=innerHeight;
+  const barOnly=LITE&&measured&&innerWidth===vw;
+  vw=innerWidth; if(!barOnly) vh=innerHeight;
   if(wide()){reel.style.height=(vh+(track.scrollWidth-vw)*1.6)+'px'} else reel.style.height='';
   docH=Math.max(1,document.documentElement.scrollHeight-vh);
   const full=document.documentElement.scrollHeight;
@@ -877,7 +892,8 @@ function measure(){
   });
   clipEls.forEach(c=>c.classList.toggle('tiny',c.textContent.length*6.6+20>c.getBoundingClientRect().width));
   mqs.forEach(o=>o.unit=o.first.offsetWidth||1);
-  if(gl) gl.size();
+  if(gl&&!barOnly) gl.size();
+  measured=true;
 }
 addEventListener('resize',measure);
 addEventListener('load',measure);
@@ -993,13 +1009,13 @@ const album=$('#album'), vinyl=$('#vinyl'), tc=$('#tc'), rprog=$('#rprog'), rnum
 const navLinks=$$('.nav a');
 const navMap={college:['college','usb','crown'],personal:['personal','shadows'],work:['work','reel'],contact:['contact']};
 const fmt=n=>String(n).padStart(2,'0');
-let lastClip=-1, lastTc='', lastT=0, cdAng=0, cdSpd=14;
+let lastClip=-1, lastTc='', lastT=0, cdAng=0, cdSpd=14, fc=0;
 
 function frame(now){
   const t=now/1000;
   const dt=Math.min(1,Math.max(.001,(now-lastT)/1000)); lastT=now;
   const ease=k=>1-Math.exp(-dt*k);
-  S=RM?scrollY:lerp(S,scrollY,ease(7)); if(Math.abs(S-scrollY)<.05) S=scrollY;
+  S=(RM||LITE)?scrollY:lerp(S,scrollY,ease(7)); if(Math.abs(S-scrollY)<.05) S=scrollY;
   const vel=scrollY-S;
   mx=lerp(mx,tmx,ease(4.4));my=lerp(my,tmy,ease(4.4));
 
@@ -1010,8 +1026,8 @@ function frame(now){
 
   /* hero */
   if(S<vh*1.2){
-    const k=S/vh;
-    stage.style.transform=`translate3d(0,${(S*.32).toFixed(1)}px,0)`;stage.style.opacity=(1-k*1.1).toFixed(3);
+    const k=LITE?0:S/vh;
+    if(!LITE){stage.style.transform=`translate3d(0,${(S*.32).toFixed(1)}px,0)`;stage.style.opacity=(1-k*1.1).toFixed(3)}
     for(const l of layers){
       const x=-mx*l.d, y=-my*l.d*.7 - k*l.d*3;
       if(l.el===vf) l.el.style.transform=`translate3d(calc(-50% + ${x.toFixed(1)}px),calc(-50% + ${y.toFixed(1)}px),0) rotateY(${(mx*12).toFixed(2)}deg) rotateX(${(-my*9).toFixed(2)}deg) scale(${(1+k*.25).toFixed(3)})`;
@@ -1027,14 +1043,14 @@ function frame(now){
   }
 
   /* parallax */
-  for(const o of pars){
+  if(!LITE) for(const o of pars){
     const r=o.host.getBoundingClientRect(); if(r.bottom<-200||r.top>vh+200) continue;
     let y=(r.top+r.height/2-vh/2)*o.v; if(o.pin) y=Math.max(0,y);
     o.el.style.transform=`translate3d(0,${y.toFixed(1)}px,0)`;
   }
 
   /* 3D screens */
-  for(const o of s3d){
+  if(!LITE) for(const o of s3d){
     const r=o.host.getBoundingClientRect(); if(r.bottom<-200||r.top>vh+200) continue;
     if(o.el.classList.contains('playing')){o.el.style.transform='';continue}
     const p=clamp((r.top+r.height/2-vh/2)/vh,-1,1);
@@ -1057,7 +1073,7 @@ function frame(now){
   /* veodi clip reveal */
   {
     const r=veodi.getBoundingClientRect();
-    if(r.bottom>0&&r.top<vh){veodi.style.setProperty('--k',clamp(r.top/(vh*.8)).toFixed(3));veodi.style.setProperty('--mx',mx.toFixed(3));veodi.style.setProperty('--my',my.toFixed(3))}
+    if(!LITE&&r.bottom>0&&r.top<vh){veodi.style.setProperty('--k',clamp(r.top/(vh*.8)).toFixed(3));veodi.style.setProperty('--mx',mx.toFixed(3));veodi.style.setProperty('--my',my.toFixed(3))}
   }
 
   /* horizontal reel */
@@ -1083,7 +1099,7 @@ function frame(now){
     if(ci>=0&&clips[ci].dataset.pal) palT=PAL[clips[ci].dataset.pal];
   }
   for(let i=0;i<3;i++) for(let j=0;j<3;j++) pal[i][j]=lerp(pal[i][j],palT[i][j],ease(1.9));
-  if(gl&&!document.hidden) gl.draw(RM?12:t);
+  if(gl&&!document.hidden&&(!LITE||(fc++%3===0))) gl.draw(RM?12:t);
 
   requestAnimationFrame(frame);
 }
